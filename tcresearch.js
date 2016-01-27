@@ -262,6 +262,16 @@ $(function(){
 			var step_count=0;
 			var title = formatAspectName(translate[fromSel])+' &rarr; '+formatAspectName(translate[toSel]);
 			var id = fromSel+'to'+toSel+'-'+n;
+
+			// position it right of the last element of the center of the window
+			if (n>0){
+				var lastElem = $('#'+fromSel+'to'+toSel+'-'+(n-1))
+				var position = {my: "left", at: "right", of: lastElem};
+			} else {
+				var position = {my: "top left", at: "right", of: $('#main-table')};
+			}
+			var lastId = n>0 ? fromSel+'to'+toSel+'-'+n-1: window;
+
 			var aspect_count={};
 			$.each(aspects, function(aspect, value){
 				aspect_count[value]=0;
@@ -272,7 +282,8 @@ $(function(){
 				autoOpen: false,
 				modal: false,
 				resizable:false,
-				width: 200
+				width: 200,
+				position: position
 			});
 			$('#'+id).append("<div></div>");
 			var loop_count=0;
