@@ -23,26 +23,47 @@ $(function(){
 	function ddDataSort(a, b) {
 		return (a.text == b.text) ? 0 : (a.text<b.text) ? -1 : 1;
 	}
+	/**
+	 * Find path between aspects
+	 * @param  {string} from  Starting aspect (lowercase)
+	 * @param  {string} to    Ending aspect
+	 * @param  {string} steps Minimum steps
+	 * @return {array}        Array of paths, each path is an array of strings
+	 */
 	function find(from, to, steps) {
+		/** Build queue of all paths, queued by length. Return valid paths **/
 		function search(queue, to, visited) {
-			while (!queue.isEmpty()) {
-				var element = queue.dequeue();
-				var node = element.path.pop();
-				if (!(node in visited) || visited[node].indexOf(element.path.length) < 0) {
-					element.path.push(node);
-					if (node == to && element.path.length > steps + 1) return element.path;
-					graph[node].forEach(function(entry) {
-						var newpath = element.path.slice();
-						newpath.push(entry);
-						queue.enqueue({"path":newpath,"length":element.length+getWeight(entry)});
-					});
-					if (!(node in visited)) visited[node] = [];
-					visited[node].push(element.path.length-1);
-				}
+			var valid_paths = [],
+				max_steps = 15,
+				max_paths = 10;
+			while (!queue.isEmpty() && valid_paths.length<max_paths) {
+			    var element = queue.dequeue();
+			    var node = element.path.pop();
+			    // avoids repeating our steps - this limits recursion but also results
+			    if (element.path.length > max_steps){
+
+				} else if (!(node in visited) || visited[node].indexOf(element.path.length) < 0) {
+			        element.path.push(node);
+			        if (node == to && element.path.length > steps + 1) {
+			            valid_paths.push(element.path);
+			        } else {
+			            graph[node].forEach(function (entry) {
+			                var newpath = element.path.slice();
+			                newpath.push(entry);
+			                queue.enqueue({
+			                    "path": newpath,
+			                    "length": element.length + getWeight(entry)
+			                });
+			            });
+			            if (!(node in visited)) visited[node] = [];
+			            visited[node].push(element.path.length - 1);
+			        }
+			    }
 			}
-			return null;
+			return valid_paths;
 		}
 
+		// A queue where paths are prioritised by length
 		var queue = new buckets.PriorityQueue(function(a,b) {
 			return b.length-a.length;
 		});
@@ -84,7 +105,7 @@ $(function(){
 		option.textContent = text;
 		return option;
 	}
-	
+
 	function formatAspectName(string)
 	{
 		//http://stackoverflow.com/a/1026087 Capitalize the first letter of string in JavaScript
@@ -94,9 +115,17 @@ $(function(){
 	fromSel = document.getElementById("fromSel");
 	toSel = document.getElementById("toSel");
 	check = document.getElementById("available");
-	steps = $("#spinner").spinner({
+	steps = $("#min-steps").spinner({
 		min: 1,
 		max: 10
+	});
+	maxSteps = $("#max-steps").spinner({
+		min: 2,
+		max: 15
+	});
+	maxPaths = $("#max-paths").spinner({
+		min: 1,
+		max: 25
 	});
 	reset_aspects();
 	$("#find_connection").click(function(){
@@ -160,7 +189,7 @@ $(function(){
 	$("#close_results").click(function(){
 		$(".result").dialog("close");
 	});
-	
+
 	function reset_aspects() {
 		aspects = $.extend([], version_dictionary[version]["base_aspects"]);
 		combinations = $.extend(true, {}, version_dictionary[version]["combinations"]);
@@ -186,7 +215,7 @@ $(function(){
 		ddData.sort(ddDataSort);
 		function format(d) {
 			var aspect = d.id;
-			return '<div class="aspect" id="'+aspect+'"><img style="margin: 4px 5px 0 0" src="aspects/color/' + translate[aspect] + '.png" /><div>' + formatAspectName(translate[aspect]) + '</div><div class="desc">' + aspect + '</div></div>'
+			return '<div class="aspect" id="'+aspect+'"><img style="margin: 4px 5px 0 0" src="aspects/color/' + translate[aspect] + '.png" /><div>' + formatAspectName(translate[aspect]) + '</div><div class="desc">' + aspect + '</div></div>';
 		}
 		$('#toSel,#fromSel').select2({
 			data: ddData,
@@ -212,44 +241,63 @@ $(function(){
 	function run() {
 		var fromSel = $('#fromSel').select2("val");
 		var toSel = $('#toSel').select2("val");
-		var path = find(fromSel, toSel, steps.spinner("value"));
-		var id = fromSel+'to'+toSel;
-		var title = formatAspectName(translate[fromSel])+' &rarr; '+formatAspectName(translate[toSel]);
+
+		var paths = find(fromSel, toSel, steps.spinner("value"));
+		paths.sort(function(a, b){
+		  return a.length - b.length; // ASC -> a - b; DESC -> b - a
+		});
+
+		var cls = fromSel+'to'+toSel;
+
 		var step_count=0;
 		var aspect_count={};
 		$.each(aspects, function(aspect, value){
 			aspect_count[value]=0;
 		});
-		$('#'+id).remove();
-		$("body").append('<ul id="'+id+'" class="aspectlist result" title="'+title+'"></ul>');
-		$('#'+id).dialog({
-			autoOpen: false,
-			modal: false,
-			resizable:false,
-			width: 200
+
+		// remove all with the same start and end aspects
+		$('.'+cls).remove();
+
+		paths.forEach(function(path,n){
+			var step_count=0;
+			var title = formatAspectName(translate[fromSel])+' &rarr; '+formatAspectName(translate[toSel]);
+			var id = fromSel+'to'+toSel+'-'+n;
+			var aspect_count={};
+			$.each(aspects, function(aspect, value){
+				aspect_count[value]=0;
+			});
+
+			$("body").append('<ul id="'+id+'" class="aspectlist result '+cls+'" title="'+title+'"></ul>');
+			$('#'+id).dialog({
+				autoOpen: false,
+				modal: false,
+				resizable:false,
+				width: 200
+			});
+			$('#'+id).append("<div></div>");
+			var loop_count=0;
+			path.forEach(function(e) {
+				loop_count++;
+				if(loop_count!=1&&loop_count!=path.length) {
+					aspect_count[e]++;
+					step_count++;
+				}
+				$('#'+id).append('<li class="aspect_result aspect" id="' + e + '"><img src="aspects/color/' + translate[e] + '.png" /><div>' + formatAspectName(translate[e]) + '</div><div class="desc">' + e + '</div></li><li>↓</li>');
+			});
+			$('#'+id).children().last().remove();
+			$('#'+id).append('<li id="aspects_used">Aspects Used</li>');
+			var used = '<ul id="aspects_used_list">';
+			$.each(aspect_count, function(aspect, value){
+				if(value>0) {
+					used = $(used).append('<li title="'+translate[aspect]+': '+value+'" style="background-image:url(\'aspects/color/'+translate[aspect]+'.png\')">'+value+'</li>');
+				}
+			});
+			used = $(used).append("<div>Total Steps: "+ step_count+"</div>");
+			used = $(used).append('</ul>');
+			$('#'+id).append(used);
+
+			$('#'+id).dialog("open");
 		});
-		$('#'+id).append("<div></div>");
-		var loop_count=0;
-		path.forEach(function(e) {
-			loop_count++;
-			if(loop_count!=1&&loop_count!=path.length) {
-				aspect_count[e]++;
-				step_count++;
-			}
-			$('#'+id).append('<li class="aspect_result aspect" id="' + e + '"><img src="aspects/color/' + translate[e] + '.png" /><div>' + formatAspectName(translate[e]) + '</div><div class="desc">' + e + '</div></li><li>↓</li>');
-		});
-		$('#'+id).children().last().remove();
-		$('#'+id).append('<li id="aspects_used">Aspects Used</li>');
-		var used = '<ul id="aspects_used_list">';
-		$.each(aspect_count, function(aspect, value){
-			if(value>0) {
-				used = $(used).append('<li title="'+translate[aspect]+': '+value+'" style="background-image:url(\'aspects/color/'+translate[aspect]+'.png\')">'+value+'</li>');
-			}
-		});
-		used = $(used).append("<div>Total Steps: "+ step_count+"</div>");
-		used = $(used).append('</ul>');
-		$('#'+id).append(used);
-		$('#'+id).dialog("open");
 	}
 	function getWeight(aspect) {
 		var el = $("#" + aspect);
