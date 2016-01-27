@@ -1,5 +1,5 @@
 $(function(){
-	var latest_version = "5.1.3";
+	var latest_version = "4.2.2.0";
 	$.each(version_dictionary, function(key,version){
 		$("#version").append("<option value="+key+">"+key+"</option>");
 	});
@@ -190,6 +190,8 @@ $(function(){
 		$(".result").dialog("close");
 	});
 
+
+
 	function reset_aspects() {
 		aspects = $.extend([], version_dictionary[version]["base_aspects"]);
 		combinations = $.extend(true, {}, version_dictionary[version]["combinations"]);
@@ -225,18 +227,30 @@ $(function(){
 		    allowClear:false,
 		    sortResults: function(results, container, query) {
     			return results.sort(function(a, b) {
-    				console.log(a,b)
     				return translate[a.id].localeCompare(translate[b.id]);
     			});
         	},
-		    matcher: function(search,text) { return text.toUpperCase().indexOf(search.toUpperCase())>=0 || translate[text].toUpperCase().indexOf(search.toUpperCase())>=0 }
+		    matcher: function(search,text) { return text.toUpperCase().indexOf(search.toUpperCase())>=0 || translate[text].toUpperCase().indexOf(search.toUpperCase())>=0;}
 		});
-		$('#toSel,#fromSel').select2("val", "air");
+
+		// set initial values
+		$('#toSel').select2("val", "air");
+		$('#fromSel').select2("val", "cold");
+
+		// build graph of aspect connections
 		graph={};
-		for (compound in combinations) {
+		for (var compound in combinations) {
 			connect(compound, combinations[compound][0]);
 			connect(compound, combinations[compound][1]);
 		}
+
+		// rerun on select
+		$('#fromSel').on("change", function (e) { run(); });
+		$('#toSel').on("change", function (e) { run(); });
+
+		// also re/draw the graph
+		run();
+
 	}
 	function run() {
 		var fromSel = $('#fromSel').select2("val");
@@ -247,68 +261,8 @@ $(function(){
 		  return a.length - b.length; // ASC -> a - b; DESC -> b - a
 		});
 
-		var cls = fromSel+'to'+toSel;
-
-		var step_count=0;
-		var aspect_count={};
-		$.each(aspects, function(aspect, value){
-			aspect_count[value]=0;
-		});
-
-		// remove all with the same start and end aspects
-		$('.'+cls).remove();
-
-		paths.forEach(function(path,n){
-			var step_count=0;
-			var title = formatAspectName(translate[fromSel])+' &rarr; '+formatAspectName(translate[toSel]);
-			var id = fromSel+'to'+toSel+'-'+n;
-
-			// position it right of the last element of the center of the window
-			if (n>0){
-				var lastElem = $('#'+fromSel+'to'+toSel+'-'+(n-1))
-				var position = {my: "left", at: "right", of: lastElem};
-			} else {
-				var position = {my: "top left", at: "right", of: $('#main-table')};
-			}
-			var lastId = n>0 ? fromSel+'to'+toSel+'-'+n-1: window;
-
-			var aspect_count={};
-			$.each(aspects, function(aspect, value){
-				aspect_count[value]=0;
-			});
-
-			$("body").append('<ul id="'+id+'" class="aspectlist result '+cls+'" title="'+title+'"></ul>');
-			$('#'+id).dialog({
-				autoOpen: false,
-				modal: false,
-				resizable:false,
-				width: 200,
-				position: position
-			});
-			$('#'+id).append("<div></div>");
-			var loop_count=0;
-			path.forEach(function(e) {
-				loop_count++;
-				if(loop_count!=1&&loop_count!=path.length) {
-					aspect_count[e]++;
-					step_count++;
-				}
-				$('#'+id).append('<li class="aspect_result aspect" id="' + e + '"><img src="aspects/color/' + translate[e] + '.png" /><div>' + formatAspectName(translate[e]) + '</div><div class="desc">' + e + '</div></li><li>↓</li>');
-			});
-			$('#'+id).children().last().remove();
-			$('#'+id).append('<li id="aspects_used">Aspects Used</li>');
-			var used = '<ul id="aspects_used_list">';
-			$.each(aspect_count, function(aspect, value){
-				if(value>0) {
-					used = $(used).append('<li title="'+translate[aspect]+': '+value+'" style="background-image:url(\'aspects/color/'+translate[aspect]+'.png\')">'+value+'</li>');
-				}
-			});
-			used = $(used).append("<div>Total Steps: "+ step_count+"</div>");
-			used = $(used).append('</ul>');
-			$('#'+id).append(used);
-
-			$('#'+id).dialog("open");
-		});
+		// also re/draw the graph
+		var force = network_graph(graph, paths);
 	}
 	function getWeight(aspect) {
 		var el = $("#" + aspect);
